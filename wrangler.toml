@@ -1,0 +1,19 @@
+name = "swariya-backend"
+main = "worker.js"
+compatibility_date = "2024-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NODE_ENV = "production"
+API_PREFIX = "/api/v1"
+CLIENT_URL = "*"
+
+# Environment secrets should be added to Cloudflare Dashboard or via CLI:
+# npx wrangler secret put MONGO_URI
+# npx wrangler secret put JWT_SECRET
+# npx wrangler secret put CASHFREE_APP_ID
+# npx wrangler secret put CASHFREE_SECRET_KEY
+# npx wrangler secret put R2_ACCOUNT_ID
+# npx wrangler secret put R2_ACCESS_KEY_ID
+# npx wrangler secret put R2_SECRET_ACCESS_KEY
+# npx wrangler secret put R2_BUCKET_NAME

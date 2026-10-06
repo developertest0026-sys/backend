@@ -1,0 +1,11 @@
+# Cloudflare Tunnel Configuration Template
+# Run: cloudflared tunnel create swariya-backend-tunnel
+# Tunnel UUID can be found in ~/.cloudflared/
+
+tunnel: <YOUR-TUNNEL-UUID>
+credentials-file: /root/.cloudflared/<YOUR-TUNNEL-UUID>.json
+
+ingress:
+  - hostname: api.swariyajewellers.com
+    service: http://localhost:5000
+  - service: http_status:404
