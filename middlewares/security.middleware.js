@@ -60,38 +60,12 @@ export const sanitizeNoSQL = mongoSanitize({
 });
 
 /**
- * Comprehensive SQL Injection & XSS Guard:
- * Recursively inspects incoming string fields in req.body, req.query, and req.params
- * for common SQL injection payload signatures (e.g. UNION SELECT, DROP TABLE, 1=1, --, scripts).
+ * SQL Injection Guard (relaxed for MongoDB & Media uploads to prevent false positives)
  */
-const SQL_INJECTION_REGEX = /(\b(SELECT|INSERT|DELETE|UPDATE|DROP|ALTER|EXEC|UNION|CREATE|TRUNCATE)\b)|(--|\/\*|\*\/|;|\bOR\b\s+['"]?\d+['"]?\s*=\s*['"]?\d+|' OR '1'='1|1=1)/i;
-
-const isSuspiciousString = (val) => {
-  if (typeof val === "string") {
-    return SQL_INJECTION_REGEX.test(val);
-  }
-  if (typeof val === "object" && val !== null) {
-    for (const key in val) {
-      if (Object.prototype.hasOwnProperty.call(val, key)) {
-        if (isSuspiciousString(val[key])) return true;
-      }
-    }
-  }
-  return false;
-};
-
 export const sanitizeSQL = (req, res, next) => {
-  try {
-    if (isSuspiciousString(req.body) || isSuspiciousString(req.query) || isSuspiciousString(req.params)) {
-      return res.status(400).json({
-        success: false,
-        message: "Malicious input detected! SQL Injection signature blocked."
-      });
-    }
-    next();
-  } catch (error) {
-    next(error);
-  }
+  // MongoDB is NoSQL; sanitizeNoSQL already handles $ and . operator injection.
+  // sanitizeSQL skipped to prevent false positive blocks on Base64 image payloads and descriptions.
+  next();
 };
 
 /**
