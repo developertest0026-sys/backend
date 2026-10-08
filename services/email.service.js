@@ -16,8 +16,35 @@ const createTransporter = () => {
     host,
     port,
     secure: port === 465,
-    auth: { user, pass }
+    auth: { user, pass },
+    tls: {
+      rejectUnauthorized: false
+    },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000
   });
+};
+
+/**
+ * Verifies SMTP connection configuration on server startup
+ */
+export const verifySMTPConnection = async () => {
+  const transporter = createTransporter();
+  if (!transporter) {
+    console.warn('⚠️  [SMTP WARNING] SMTP_USER or SMTP_PASS missing in environment variables. Emails will be logged to console only.');
+    return false;
+  }
+
+  try {
+    await transporter.verify();
+    console.log(`✅ [SMTP SUCCESS] Hostinger SMTP Connected successfully! Host: ${process.env.SMTP_HOST || 'smtp.hostinger.com'} | User: ${process.env.SMTP_USER}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ [SMTP ERROR] Hostinger SMTP Connection Failed:`, error.message);
+    console.error(`👉 Tip: Check Render environment variables (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) and password validity.`);
+    return false;
+  }
 };
 
 /**
