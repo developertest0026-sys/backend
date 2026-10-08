@@ -11,9 +11,27 @@ try {
   // fallback if node version doesn't support
 }
 
+/**
+ * Resolves a hostname to an explicit IPv4 address to guarantee zero IPv6 socket attempts
+ */
+const resolveIPv4 = async (hostname) => {
+  if (!hostname) return '172.65.255.143';
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) return hostname;
+
+  try {
+    const ips = await dns.promises.resolve4(hostname);
+    if (ips && ips.length > 0) {
+      return ips[0];
+    }
+  } catch (err) {
+    console.warn(`[SMTP DNS Warning] IPv4 resolve failed for ${hostname}, using fallback IP:`, err.message);
+  }
+  return '172.65.255.143'; // Direct Hostinger SMTP IPv4 fallback
+};
+
 // Create SMTP transporter using environment configuration
-const createTransporter = () => {
-  const host = process.env.SMTP_HOST || 'smtp.hostinger.com';
+const createTransporter = async () => {
+  const originalHost = process.env.SMTP_HOST || 'smtp.hostinger.com';
   const port = parseInt(process.env.SMTP_PORT || '465', 10);
   const user = process.env.SMTP_USER || '';
   const pass = process.env.SMTP_PASS || '';
@@ -22,25 +40,17 @@ const createTransporter = () => {
     return null;
   }
 
+  // Resolve hostname directly to IPv4 IP to eliminate IPv6 network errors on Render
+  const ipv4Host = await resolveIPv4(originalHost);
+
   return nodemailer.createTransport({
-    host,
+    host: ipv4Host,
     port,
     secure: port === 465,
     auth: { user, pass },
     tls: {
       rejectUnauthorized: false,
-      servername: host
-    },
-    family: 4, // Force IPv4 socket
-    lookup: (hostname, _options, callback) => {
-      // Explicitly force IPv4 lookup to bypass IPv6 ENETUNREACH on Render cloud
-      dns.lookup(hostname, { family: 4 }, (err, address, family) => {
-        if (err) {
-          // Fallback to direct Hostinger IPv4 if DNS fails
-          return callback(null, '172.65.255.143', 4);
-        }
-        callback(null, address, family || 4);
-      });
+      servername: originalHost
     },
     connectionTimeout: 20000,
     greetingTimeout: 20000,
@@ -52,7 +62,7 @@ const createTransporter = () => {
  * Verifies SMTP connection configuration on server startup
  */
 export const verifySMTPConnection = async () => {
-  const transporter = createTransporter();
+  const transporter = await createTransporter();
   if (!transporter) {
     console.warn('⚠️  [SMTP WARNING] SMTP_USER or SMTP_PASS missing in environment variables. Emails will be logged to console only.');
     return false;
@@ -96,7 +106,7 @@ export const sendOrderEmail = async (order, statusType = 'CONFIRMED') => {
     }
 
     const htmlContent = generateOrderEmailHTML(order, statusType);
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
 
     if (!transporter) {
       console.log(`\n==================================================`);
