@@ -2,24 +2,20 @@ import Video from "../models/Video.js";
 
 const parseYouTubeEmbedUrl = (url) => {
   if (!url) return url;
-  if (url.includes("youtube.com/embed/")) return url;
-
-  // Shorts link
+  
+  let videoId = "";
   const shortsMatch = url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/);
-  if (shortsMatch && shortsMatch[1]) {
-    return `https://www.youtube.com/embed/${shortsMatch[1]}`;
-  }
-
-  // Watch link
   const watchMatch = url.match(/[?&]v=([a-zA-Z0-9_-]+)/);
-  if (watchMatch && watchMatch[1]) {
-    return `https://www.youtube.com/embed/${watchMatch[1]}`;
-  }
-
-  // Youtu.be short link
   const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
-  if (shortMatch && shortMatch[1]) {
-    return `https://www.youtube.com/embed/${shortMatch[1]}`;
+  const embedMatch = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
+
+  if (shortsMatch && shortsMatch[1]) videoId = shortsMatch[1];
+  else if (watchMatch && watchMatch[1]) videoId = watchMatch[1];
+  else if (shortMatch && shortMatch[1]) videoId = shortMatch[1];
+  else if (embedMatch && embedMatch[1]) videoId = embedMatch[1];
+
+  if (videoId) {
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&loop=1&playlist=${videoId}&playsinline=1&enablejsapi=1&showinfo=0&iv_load_policy=3`;
   }
 
   return url;
@@ -58,6 +54,7 @@ export const getVideos = async (req, res) => {
     const totalPages = Math.ceil(total / limit);
 
     const videos = await Video.find()
+      .populate("product")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -92,7 +89,7 @@ export const getVideos = async (req, res) => {
  */
 export const createVideo = async (req, res) => {
   try {
-    const { title, url, platform, thumbnail } = req.body;
+    const { title, url, platform, thumbnail, product } = req.body;
 
     if (!title || !url) {
       return res.status(400).json({ success: false, message: "Title and URL are required" });
@@ -104,7 +101,8 @@ export const createVideo = async (req, res) => {
       title,
       url,
       platform: platform || "Insta",
-      thumbnail: finalThumbnail
+      thumbnail: finalThumbnail,
+      product: product || null
     });
 
     return res.status(201).json({

@@ -54,16 +54,24 @@ export const verifyToken = async (req, res, next) => {
 export const checkRole = (roles = []) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Unauthorized: Access token missing or invalid" });
     }
 
-    if (!roles.includes(req.user.role) && !req.user.isStaff) {
-      return res.status(403).json({
-        success: false,
-        message: `Forbidden: Requires one of these roles: ${roles.join(", ")}`
-      });
+    const userRole = req.user.role || "";
+
+    // SUPER_ADMIN always has full access
+    if (userRole === "SUPER_ADMIN") {
+      return next();
     }
 
-    next();
+    // Check if user role matches requested roles, or if 'admin' generic role is specified for staff
+    if (roles.includes(userRole) || (roles.includes("admin") && req.user.isStaff)) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: `Forbidden: Access restricted. Required role(s): ${roles.join(", ")}`
+    });
   };
 };

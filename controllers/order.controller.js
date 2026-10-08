@@ -1,9 +1,10 @@
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
-import { createCashfreeOrder, fetchCashfreeOrder } from "../utils/cashfree.util.js";
+import { createCashfreeOrder, fetchCashfreeOrder, verifyCashfreeSignature } from "../utils/cashfree.util.js";
+import { sendOrderEmail } from "../services/email.service.js";
 
 /**
- * Verify Cashfree Payment Status Server-Side
+ * 🔒 Verify Cashfree Payment Status Server-Side (Server-to-Server)
  */
 export const verifyCashfreePayment = async (req, res) => {
   try {
@@ -17,13 +18,19 @@ export const verifyCashfreePayment = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order record not found" });
     }
 
-    // Verify with Cashfree Server
-    const cfDetails = await fetchCashfreeOrder(orderId || order._id.toString());
-    
-    if (cfDetails.order_status === "PAID" || cfDetails.order_status === "SUCCESS" || process.env.NODE_ENV !== "production") {
+    // Verify with Cashfree PG Server directly
+    const cfDetails = await fetchCashfreeOrder(order.orderNumber || orderId || order._id.toString());
+    const isPaid = cfDetails && (cfDetails.order_status === "PAID" || cfDetails.order_status === "SUCCESS");
+
+    const isProduction = process.env.CASHFREE_ENV === "PRODUCTION" || process.env.NODE_ENV === "production";
+
+    if (isPaid || (!isProduction && process.env.NODE_ENV !== "production")) {
       order.paymentStatus = "Paid";
       order.orderStatus = "Confirmed";
       await order.save();
+
+      // Trigger Order Confirmed Email Notification
+      sendOrderEmail(order, "CONFIRMED");
 
       return res.status(200).json({
         success: true,
@@ -31,9 +38,12 @@ export const verifyCashfreePayment = async (req, res) => {
         data: order
       });
     } else {
+      order.paymentStatus = "Failed";
+      await order.save();
+
       return res.status(400).json({
         success: false,
-        message: `Payment status is ${cfDetails.order_status}`
+        message: `Payment verification failed. Cashfree Status: ${cfDetails?.order_status || 'UNPAID'}`
       });
     }
   } catch (error) {
@@ -41,6 +51,49 @@ export const verifyCashfreePayment = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
+/**
+ * 🔒 Cashfree Webhook Handler (Asynchronous Server Notification)
+ */
+export const handleCashfreeWebhook = async (req, res) => {
+  try {
+    const signature = req.headers["x-webhook-signature"];
+    const timestamp = req.headers["x-webhook-timestamp"];
+    const rawBody = req.rawBody || JSON.stringify(req.body);
+
+    const isProduction = process.env.CASHFREE_ENV === "PRODUCTION" || process.env.NODE_ENV === "production";
+
+    // Verify HMAC SHA-256 Webhook Signature in Production
+    if (isProduction) {
+      const isValid = verifyCashfreeSignature(timestamp, rawBody, signature);
+      if (!isValid) {
+        console.error("[Cashfree Webhook Error] Invalid signature received.");
+        return res.status(400).json({ success: false, message: "Invalid signature" });
+      }
+    }
+
+    const { data, event } = req.body;
+    if (event === "PAYMENT_SUCCESS" || data?.order?.order_status === "PAID") {
+      const orderId = data?.order?.order_id;
+      const order = await Order.findOne({ $or: [{ orderNumber: orderId }, { _id: orderId }] });
+
+      if (order && order.paymentStatus !== "Paid") {
+        order.paymentStatus = "Paid";
+        order.orderStatus = "Confirmed";
+        await order.save();
+
+        console.log(`[Cashfree Webhook] Order ${order.orderNumber || order._id} marked PAID via Webhook.`);
+        sendOrderEmail(order, "CONFIRMED");
+      }
+    }
+
+    return res.status(200).json({ success: true, message: "Webhook processed" });
+  } catch (error) {
+    console.error("[Cashfree Webhook Handler Error]:", error);
+    return res.status(500).json({ success: false, message: "Webhook Processing Error" });
+  }
+};
+
 
 
 /**
@@ -58,6 +111,7 @@ export const checkoutOrder = async (req, res) => {
     };
 
     let totalAmount = 0;
+    let totalShippingCharge = 0;
     const processedProducts = [];
 
     for (const item of rawProducts) {
@@ -66,18 +120,29 @@ export const checkoutOrder = async (req, res) => {
         return res.status(404).json({ success: false, message: `Product ${item.product} not found` });
       }
 
-      const price = item.price || prod.discountPrice || prod.price;
-      const quantity = Number(item.quantity || 1);
+      // 🔒 Security: Always calculate price strictly from server database Product document to prevent client-side price tampering
+      const price = (prod.discountPrice && Number(prod.discountPrice) > 0) ? Number(prod.discountPrice) : Number(prod.price || 0);
+      const itemShippingCharge = Number(prod.shippingCharge || 0);
+      const quantity = Math.max(1, Number(item.quantity || 1));
       totalAmount += price * quantity;
+      totalShippingCharge += itemShippingCharge * quantity;
+
+      const chosenColor = item.selectedColor || item.color || "";
+      const chosenSize = item.selectedSize || item.size || prod.size || "";
+      const chosenImage = item.selectedImage || item.image || (prod.images && prod.images.length > 0 ? prod.images[0] : "");
 
       processedProducts.push({
         product: prod._id,
         name: prod.title || prod.name || "Swariya Fine Jewellery Piece",
-        image: item.image || (prod.images && prod.images.length > 0 ? prod.images[0] : ""),
-        size: item.size || prod.size || "Standard Size",
-        purity: prod.purity || "22K Gold BIS Hallmarked",
+        image: chosenImage,
+        size: chosenSize,
+        color: chosenColor,
+        selectedColor: chosenColor,
+        selectedSize: chosenSize,
+        purity: prod.purity || "Anti-Tarnish Finish",
         quantity,
-        price
+        price,
+        shippingCharge: itemShippingCharge
       });
     }
 
@@ -86,7 +151,7 @@ export const checkoutOrder = async (req, res) => {
       street: shippingAddress?.street || "",
       city: shippingAddress?.city || "",
       state: shippingAddress?.state || "",
-      pincode: shippingAddress?.pincode || shippingAddress?.zipCode || "",
+      pincode: shippingAddress?.pincode || shippingAddress?.postalCode || shippingAddress?.zipCode || "",
       landmark: shippingAddress?.landmark || "",
       country: shippingAddress?.country || "India"
     };
@@ -97,9 +162,9 @@ export const checkoutOrder = async (req, res) => {
 
     if (!isCOD) {
       prepaidDiscountAmount = Math.round(totalAmount * 0.10);
-      finalPayable = totalAmount - prepaidDiscountAmount;
+      finalPayable = totalAmount - prepaidDiscountAmount + totalShippingCharge;
     } else {
-      finalPayable = totalAmount + 450; // COD Doorstep handling fee
+      finalPayable = totalAmount + totalShippingCharge;
     }
 
     const orderIdNumber = `SW-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -129,9 +194,15 @@ export const checkoutOrder = async (req, res) => {
       paymentMethod: isCOD ? "COD" : "Online",
       paymentStatus: "Pending",
       prepaidDiscount: prepaidDiscountAmount,
+      totalShippingCharge: totalShippingCharge,
       orderStatus: isCOD ? "Confirmed" : "Pending",
       totalAmount: finalPayable
     });
+
+    // Trigger Order Email if COD order is immediately confirmed
+    if (isCOD) {
+      sendOrderEmail(newOrder, "CONFIRMED");
+    }
 
     return res.status(201).json({
       success: true,
@@ -177,7 +248,10 @@ export const getOrders = async (req, res) => {
         ...p,
         name: p.name || p.product?.title || p.product?.name || "Swariya Fine Jewellery Piece",
         image: p.image || (p.product?.images && p.product.images.length > 0 ? p.product.images[0] : ""),
-        size: p.size || p.product?.size || "Standard Size",
+        size: p.selectedSize || p.size || p.product?.size || "Standard Size",
+        color: p.selectedColor || p.color || p.product?.color || "",
+        selectedColor: p.selectedColor || p.color || "",
+        selectedSize: p.selectedSize || p.size || "",
         purity: p.purity || p.product?.purity || "22K Gold"
       }))
     }));
@@ -236,6 +310,11 @@ export const updateOrderStatus = async (req, res) => {
     if (orderStatus) order.orderStatus = orderStatus;
     if (paymentStatus) order.paymentStatus = paymentStatus;
     await order.save();
+
+    // Trigger Order Email for status update (Dispatched, Shipped, Delivered)
+    if (orderStatus) {
+      sendOrderEmail(order, orderStatus);
+    }
 
     return res.status(200).json({
       success: true,

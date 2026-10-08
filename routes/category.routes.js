@@ -3,6 +3,7 @@ import {
   getCategories, 
   createCategory, 
   updateCategory, 
+  toggleCategoryFeatured,
   deleteCategory,
   createSubCategory,
   deleteSubCategory
@@ -14,6 +15,7 @@ const router = Router();
 router.get("/categories", getCategories);
 router.post("/categories", verifyToken, checkRole(["SUPER_ADMIN", "INVENTORY_MANAGER", "admin"]), createCategory);
 router.put("/categories/:id", verifyToken, checkRole(["SUPER_ADMIN", "INVENTORY_MANAGER", "admin"]), updateCategory);
+router.patch("/categories/:id/toggle-featured", verifyToken, checkRole(["SUPER_ADMIN", "INVENTORY_MANAGER", "admin"]), toggleCategoryFeatured);
 router.delete("/categories/:id", verifyToken, checkRole(["SUPER_ADMIN", "INVENTORY_MANAGER", "admin"]), deleteCategory);
 
 router.post("/subcategories", verifyToken, checkRole(["SUPER_ADMIN", "INVENTORY_MANAGER", "admin"]), createSubCategory);

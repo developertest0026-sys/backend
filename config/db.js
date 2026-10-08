@@ -12,28 +12,35 @@ const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/swariya_jewel_db";
     const conn = await mongoose.connect(mongoUri, {
-      bufferCommands: false,
+      bufferCommands: true,
     });
     isConnected = true;
+
     console.log(`🍃 MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
 
-    // Auto-seed Default Super Admin Account in Admin Collection if not exists
+    // Auto-seed Default Super Admin Accounts in Admin Collection
     try {
-      const adminExists = await Admin.findOne({ email: "admin@swariya.com" });
-      if (!adminExists) {
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash("admin123", salt);
-        await Admin.create({
-          name: "Swariya Senior Admin",
-          email: "admin@swariya.com",
-          password: passwordHash,
-          role: "SUPER_ADMIN"
-        });
-        console.log("👑 Default Admin account seeded in Admin collection: admin@swariya.com / admin123");
+      const adminEmails = ["admin@sawyria.com", "admin@swariya.com"];
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash("admin123", salt);
+
+      for (const email of adminEmails) {
+        const adminExists = await Admin.findOne({ email });
+        if (!adminExists) {
+          await Admin.create({
+            name: "Sawyria Senior Admin",
+            email: email,
+            password: passwordHash,
+            role: "SUPER_ADMIN",
+            isActive: true
+          });
+          console.log(`👑 Default Admin account seeded: ${email} / admin123`);
+        }
       }
     } catch (seedErr) {
       console.warn("⚠️ Admin seeding check error:", seedErr.message);
     }
+
 
     return conn;
   } catch (error) {

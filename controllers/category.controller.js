@@ -40,7 +40,7 @@ export const createCategory = async (req, res) => {
       slug: generatedSlug,
       description: description || name,
       image: image || "", 
-      isFeatured: isFeatured || false 
+      isFeatured: isFeatured !== undefined ? isFeatured : true 
     });
 
     return res.status(201).json({ success: true, message: "Category created successfully", data: category });
@@ -61,6 +61,29 @@ export const updateCategory = async (req, res) => {
     return res.status(200).json({ success: true, message: "Category updated", data: updated });
   } catch (error) {
     console.error("Update Category Error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
+  }
+};
+
+/**
+ * Toggle Category Featured (Show on Home Page)
+ */
+export const toggleCategoryFeatured = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const category = await Category.findById(id);
+    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+
+    category.isFeatured = !category.isFeatured;
+    await category.save();
+
+    return res.status(200).json({ 
+      success: true, 
+      message: `Category "${category.name}" home page display set to ${category.isFeatured ? 'ENABLED' : 'DISABLED'}`, 
+      data: category 
+    });
+  } catch (error) {
+    console.error("Toggle Category Featured Error:", error);
     return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
   }
 };

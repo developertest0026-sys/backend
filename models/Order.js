@@ -14,9 +14,13 @@ const orderSchema = new mongoose.Schema(
         name: { type: String },
         image: { type: String },
         size: { type: String },
+        color: { type: String },
+        selectedColor: { type: String },
+        selectedSize: { type: String },
         purity: { type: String },
         quantity: { type: Number, required: true },
-        price: { type: Number, required: true }
+        price: { type: Number, required: true },
+        shippingCharge: { type: Number, default: 0 }
       }
     ],
     shippingAddress: {
@@ -41,9 +45,10 @@ const orderSchema = new mongoose.Schema(
     paymentError: { type: String },
     payuResponse: { type: mongoose.Schema.Types.Mixed },
     prepaidDiscount: { type: Number, default: 0 },
+    totalShippingCharge: { type: Number, default: 0 },
     orderStatus: {
       type: String,
-      enum: ['Pending', 'Confirmed', 'IN_PRODUCTION', 'READY_TO_SHIP', 'Shipped', 'SHIPPED', 'Delivered', 'DELIVERED', 'Cancelled'],
+      enum: ['Pending', 'Confirmed', 'Dispatched', 'DISPATCHED', 'Shipped', 'SHIPPED', 'Delivered', 'DELIVERED', 'Cancelled'],
       default: 'Pending'
     },
     couponApplied: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon' },

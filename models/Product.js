@@ -7,8 +7,10 @@ const productSchema = new mongoose.Schema(
     description: { type: String, required: true },
     category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
     subCategory: { type: mongoose.Schema.Types.ObjectId, ref: 'SubCategory' },
-    material: { type: String, required: true }, // e.g. Gold, Silver
-    purity: { type: String }, // e.g. 18K, 22K
+    material: { type: String }, // e.g. Gold, Silver, Rose Gold
+    purity: { type: String }, // e.g. 18K, 22K, 24K
+    color: { type: String }, // e.g. Yellow Gold, Rose Gold, White Gold
+    careInstructions: { type: String }, // Care & Cleaning instructions text
     gemstones: [
       {
         type: { type: String },
@@ -19,8 +21,9 @@ const productSchema = new mongoose.Schema(
       }
     ],
     makingCharges: { type: Number, default: 0 },
+    shippingCharge: { type: Number, default: 0 },
     hallmark: { type: String },
-    gender: { type: String, enum: ['Men', 'Women', 'Kids', 'Unisex'], default: 'Unisex' },
+    gender: { type: mongoose.Schema.Types.Mixed }, // String or Array of Strings e.g. ['Women', 'Gen-Z']
     weight: { type: Number },
     size: { type: mongoose.Schema.Types.Mixed }, // String or Number
     price: { type: Number, required: true },

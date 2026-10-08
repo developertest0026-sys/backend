@@ -1,8 +1,11 @@
 import { Router } from "express";
-import { generateUploadUrl, confirmMediaUpload, getImageKitAuth, uploadImageKitFile } from "../controllers/media.controller.js";
+import { generateUploadUrl, confirmMediaUpload, getImageKitAuth, uploadImageKitFile, uploadPublicReviewPhoto } from "../controllers/media.controller.js";
 import { verifyToken, checkRole } from "../middlewares/authJwt.js";
 
 const router = Router();
+
+// Public Review Photo Upload
+router.post("/media/public-upload", uploadPublicReviewPhoto);
 
 // ImageKit endpoints
 router.get("/media/imagekit-auth", verifyToken, getImageKitAuth);

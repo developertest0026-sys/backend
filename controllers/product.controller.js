@@ -93,8 +93,11 @@ export const createProduct = async (req, res) => {
       subCategory,
       material,
       purity,
+      color,
+      careInstructions,
       gemstones,
       makingCharges,
+      shippingCharge,
       hallmark,
       gender,
       weight,
@@ -106,7 +109,8 @@ export const createProduct = async (req, res) => {
       variants,
       isTrending,
       isNewArrival,
-      isBestseller
+      isBestseller,
+      hasCashOnDelivery
     } = req.body;
 
     const existing = await Product.findOne({ sku: sku.toUpperCase() });
@@ -131,12 +135,15 @@ export const createProduct = async (req, res) => {
       description,
       category: validCategory,
       subCategory: validSubCategory,
-      material,
-      purity,
+      material: material || "",
+      purity: purity || "",
+      color: color || "",
+      careInstructions: careInstructions || "",
       gemstones: gemstones || [],
       makingCharges: Number(makingCharges || 0),
+      shippingCharge: Number(shippingCharge || 0),
       hallmark: hallmark || "",
-      gender: gender || "Unisex",
+      gender: gender || "",
       weight: Number(weight || 0),
       size: size || null,
       price: Number(price),
@@ -146,7 +153,8 @@ export const createProduct = async (req, res) => {
       variants: variants || [],
       isTrending: isTrending || false,
       isNewArrival: isNewArrival || false,
-      isBestseller: isBestseller || false
+      isBestseller: isBestseller || false,
+      hasCashOnDelivery: hasCashOnDelivery !== undefined ? Boolean(hasCashOnDelivery) : true
     });
 
     return res.status(201).json({
@@ -223,5 +231,58 @@ export const deleteProduct = async (req, res) => {
   } catch (error) {
     console.error("Delete Product Error:", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+/**
+ * Check Product Code / SKU Availability
+ * GET /api/v1/products/check-sku/:sku
+ */
+export const checkProductSku = async (req, res) => {
+  try {
+    const { sku } = req.params;
+    if (!sku) {
+      return res.status(400).json({ success: false, message: "Product SKU Code is required" });
+    }
+
+    const cleanSku = sku.trim().toUpperCase();
+    const product = await Product.findOne({ sku: cleanSku }).populate("category subCategory").lean();
+
+    if (!product) {
+      return res.status(200).json({
+        success: true,
+        exists: false,
+        available: false,
+        message: `Product Code "${cleanSku}" is available for creation (Not found in catalog).`,
+        product: null
+      });
+    }
+
+    const isAvailable = product.stock > 0;
+
+    return res.status(200).json({
+      success: true,
+      exists: true,
+      available: isAvailable,
+      message: isAvailable 
+        ? `Product Code "${cleanSku}" is VALID and IN STOCK (${product.stock} available).` 
+        : `Product Code "${cleanSku}" exists but is OUT OF STOCK.`,
+      product: {
+        id: product._id,
+        sku: product.sku,
+        name: product.name,
+        price: product.price,
+        discountPrice: product.discountPrice,
+        stock: product.stock,
+        isAvailable,
+        category: product.category?.name || 'Jewelry',
+        subCategory: product.subCategory?.name || '',
+        image: product.images?.[0] || '',
+        description: product.description || ''
+      }
+    });
+  } catch (error) {
+    console.error("Check Product SKU Error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
   }
 };

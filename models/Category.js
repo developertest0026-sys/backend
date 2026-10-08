@@ -6,7 +6,7 @@ const categorySchema = new mongoose.Schema(
     slug: { type: String },
     description: { type: String, required: true },
     image: { type: String, required: true },
-    isFeatured: { type: Boolean, default: false }
+    isFeatured: { type: Boolean, default: true }
   },
   { timestamps: true }
 );

@@ -129,3 +129,46 @@ export const confirmMediaUpload = async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
+/**
+ * Public Photo Upload Endpoint for Customer Product Reviews
+ */
+export const uploadPublicReviewPhoto = async (req, res) => {
+  try {
+    const { file, fileName } = req.body;
+
+    if (!file) {
+      return res.status(400).json({ success: false, message: "file is required" });
+    }
+
+    try {
+      const result = await uploadToImageKit({
+        file,
+        fileName: fileName || `review-${Date.now()}.jpg`,
+        folder: "/swariya-reviews",
+        tags: ["swariya-review"]
+      });
+
+      if (result && (result.optimizedUrl || result.url)) {
+        return res.status(200).json({
+          success: true,
+          url: result.optimizedUrl || result.url
+        });
+      }
+    } catch (ikErr) {
+      console.warn("ImageKit Public Upload Fallback:", ikErr.message);
+    }
+
+    if (typeof file === "string") {
+      return res.status(200).json({
+        success: true,
+        url: file
+      });
+    }
+
+    return res.status(400).json({ success: false, message: "Failed to process image" });
+  } catch (error) {
+    console.error("Upload Public Review Photo Error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Upload failed" });
+  }
+};

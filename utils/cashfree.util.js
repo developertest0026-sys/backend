@@ -1,73 +1,78 @@
 import axios from "axios";
 import crypto from "crypto";
 
-const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID || "TEST_APP_ID";
-const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY || "TEST_SECRET_KEY";
-const CASHFREE_ENV = process.env.CASHFREE_ENV || "SANDBOX";
+const getCashfreeConfig = () => {
+  const appId = process.env.CASHFREE_APP_ID || "TEST10000000000000000000";
+  const secretKey = process.env.CASHFREE_SECRET_KEY || "TEST_SECRET_KEY_MOCK";
+  const env = (process.env.CASHFREE_ENV || "SANDBOX").toUpperCase();
+  const isProduction = env === "PRODUCTION" || process.env.NODE_ENV === "production";
 
-const BASE_URL = CASHFREE_ENV === "PRODUCTION"
-  ? "https://api.cashfree.com/pg"
-  : "https://sandbox.cashfree.com/pg";
+  const baseUrl = isProduction
+    ? "https://api.cashfree.com/pg"
+    : "https://sandbox.cashfree.com/pg";
+
+  return { appId, secretKey, env, isProduction, baseUrl };
+};
 
 /**
- * Create Order in Cashfree Payment Gateway
+ * 🔒 Create Order in Cashfree Payment Gateway (Strict Server-Side Initialization)
  */
 export const createCashfreeOrder = async ({ orderId, orderAmount, customerEmail, customerPhone, customerName }) => {
+  const { appId, secretKey, isProduction, baseUrl } = getCashfreeConfig();
+
+  const validPhone = (customerPhone && String(customerPhone).replace(/[^0-9]/g, '').length >= 10)
+    ? String(customerPhone).replace(/[^0-9]/g, '').slice(-10)
+    : "9876543210";
+
+  const validEmail = (customerEmail && customerEmail.includes('@'))
+    ? customerEmail
+    : "customer@sawyria.com";
+
+  const clientDomain = (process.env.CLIENT_URL || "https://sawyria.com").replace(/^http:\/\//, "https://");
+  const returnUrl = `${clientDomain}/order-status?order_id={order_id}`;
+
+  const payload = {
+    order_id: String(orderId),
+    order_amount: Number(orderAmount),
+    order_currency: "INR",
+    customer_details: {
+      customer_id: `cust_${validPhone}_${Date.now()}`,
+      customer_name: customerName || "Swariya Customer",
+      customer_email: validEmail,
+      customer_phone: validPhone
+    },
+    order_meta: {
+      return_url: returnUrl
+    }
+  };
+
+
   try {
-    const validPhone = (customerPhone && String(customerPhone).replace(/[^0-9]/g, '').length >= 10) 
-      ? String(customerPhone).replace(/[^0-9]/g, '').slice(-10) 
-      : "9876543210";
-    const validEmail = (customerEmail && customerEmail.includes('@')) 
-      ? customerEmail 
-      : "customer@swariyajewels.com";
-
-    const payload = {
-      order_id: orderId,
-      order_amount: Number(orderAmount),
-      order_currency: "INR",
-      customer_details: {
-        customer_id: `cust_${validPhone}_${Date.now()}`,
-        customer_name: customerName || "Swariya Customer",
-        customer_email: validEmail,
-        customer_phone: validPhone
-      },
-      order_meta: {
-        return_url: `${process.env.CLIENT_URL || "http://localhost:3000"}/order-status?order_id={order_id}`
+    const response = await axios.post(`${baseUrl}/orders`, payload, {
+      headers: {
+        "x-api-version": "2023-08-01",
+        "x-client-id": appId,
+        "x-client-secret": secretKey,
+        "Content-Type": "application/json"
       }
-    };
+    });
 
-    // Try Cashfree API call if non-placeholder key, else fallback to dev simulated session
-    if (CASHFREE_APP_ID && !CASHFREE_APP_ID.startsWith("TEST10000")) {
-      try {
-        const response = await axios.post(`${BASE_URL}/orders`, payload, {
-          headers: {
-            "x-api-version": "2023-08-01",
-            "x-client-id": CASHFREE_APP_ID,
-            "x-client-secret": CASHFREE_SECRET_KEY,
-            "Content-Type": "application/json"
-          }
-        });
-        return response.data;
-      } catch (apiError) {
-        console.warn("Cashfree PG API Network fallback:", apiError.response?.data || apiError.message);
-      }
+    console.log(`[Cashfree Secure PG] Order Created: ${orderId} | Session ID: ${response.data.payment_session_id}`);
+    return response.data;
+  } catch (apiError) {
+    const errDetails = apiError.response?.data || apiError.message;
+    console.error("[Cashfree PG API Error]:", errDetails);
+
+    if (isProduction) {
+      throw new Error(`Cashfree Secure PG Error: ${JSON.stringify(errDetails)}`);
     }
 
-    // Dev / Sandbox Simulated Fallback Session
+    // Sandbox / Development fallback simulated session (ONLY IN NON-PRODUCTION ENVIRONMENT)
+    console.warn("[Cashfree Sandbox] Using local test payment session for development testing.");
     return {
       cf_order_id: `cf_${Date.now()}`,
       order_id: orderId,
-      payment_session_id: `session_cf_${Date.now()}`,
-      order_status: "ACTIVE",
-      order_amount: orderAmount,
-      order_currency: "INR"
-    };
-  } catch (error) {
-    console.warn("Cashfree order creation fallback:", error.message);
-    return {
-      cf_order_id: `cf_${Date.now()}`,
-      order_id: orderId,
-      payment_session_id: `session_cf_${Date.now()}`,
+      payment_session_id: `session_cf_mock_${Date.now()}`,
       order_status: "ACTIVE",
       order_amount: orderAmount,
       order_currency: "INR"
@@ -76,21 +81,35 @@ export const createCashfreeOrder = async ({ orderId, orderAmount, customerEmail,
 };
 
 /**
- * Fetch Order Details directly from Cashfree PG Server
+ * 🔒 Fetch & Verify Order Status directly from Cashfree PG Server (Server-to-Server)
  */
 export const fetchCashfreeOrder = async (orderId) => {
+  const { appId, secretKey, isProduction, baseUrl } = getCashfreeConfig();
+
   try {
-    const response = await axios.get(`${BASE_URL}/orders/${orderId}`, {
+    const response = await axios.get(`${baseUrl}/orders/${orderId}`, {
       headers: {
         "x-api-version": "2023-08-01",
-        "x-client-id": CASHFREE_APP_ID,
-        "x-client-secret": CASHFREE_SECRET_KEY,
+        "x-client-id": appId,
+        "x-client-secret": secretKey,
         "Content-Type": "application/json"
       }
     });
+
     return response.data;
   } catch (error) {
-    console.warn("Cashfree fetch order error (Dev mode fallback):", error.response?.data || error.message);
+    const errDetails = error.response?.data || error.message;
+    console.error(`[Cashfree Fetch Error for Order ${orderId}]:`, errDetails);
+
+    if (isProduction) {
+      return {
+        order_id: orderId,
+        order_status: "FAILED",
+        error: "Failed to verify transaction status with Cashfree servers."
+      };
+    }
+
+    // In sandbox dev testing when using mock credentials
     return {
       order_id: orderId,
       order_status: "PAID",
@@ -101,15 +120,27 @@ export const fetchCashfreeOrder = async (orderId) => {
 };
 
 /**
- * Verify Cashfree Webhook Signature
+ * 🔒 Verify Cashfree HMAC SHA-256 Webhook Signature (Anti-Tampering Protection)
  */
 export const verifyCashfreeSignature = (timestamp, rawBody, signature) => {
+  const { secretKey } = getCashfreeConfig();
   if (!signature || !timestamp) return false;
-  const data = timestamp + rawBody;
-  const expectedSignature = crypto
-    .createHmac("sha256", CASHFREE_SECRET_KEY)
-    .update(data)
-    .digest("base64");
-  return signature === expectedSignature;
+
+  try {
+    const data = timestamp + rawBody;
+    const expectedSignature = crypto
+      .createHmac("sha256", secretKey)
+      .update(data)
+      .digest("base64");
+
+    return crypto.timingSafeEqual(
+      Buffer.from(signature, "base64"),
+      Buffer.from(expectedSignature, "base64")
+    );
+  } catch (err) {
+    console.error("[Cashfree Webhook Signature Verification Error]:", err);
+    return false;
+  }
 };
+
 

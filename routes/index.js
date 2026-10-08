@@ -8,6 +8,7 @@ import orderRoutes from "./order.routes.js";
 import transactionRoutes from "./transaction.routes.js";
 import videoRoutes from "./video.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
+import reviewRoutes from "./review.routes.js";
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use("/", orderRoutes);
 router.use("/", transactionRoutes);
 router.use("/", videoRoutes);
 router.use("/", dashboardRoutes);
+router.use("/", reviewRoutes);
 
 export default router;

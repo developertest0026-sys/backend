@@ -5,7 +5,8 @@ const videoSchema = new mongoose.Schema(
     title: { type: String, required: true },
     url: { type: String, required: true },
     platform: { type: String, required: true, enum: ['Insta', 'Youtube Shorts'] },
-    thumbnail: { type: String }
+    thumbnail: { type: String },
+    product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' }
   },
   { timestamps: true }
 );
