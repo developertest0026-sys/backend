@@ -35,7 +35,7 @@ export const sendOrderEmail = async (order, statusType = 'CONFIRMED') => {
       return;
     }
 
-    const orderNumber = order.orderNumber || order._id || 'SW-ORD';
+    const orderNumber = order.orderNumber || (order._id ? `#ORD-${order._id.toString().slice(-8).toUpperCase()}` : '#ORD-7F92KLM4');
     
     let subject = `Order Confirmed (${orderNumber}) - Swariya Fine Jewellery`;
     if (statusType === 'DISPATCHED' || statusType === 'Processing') {

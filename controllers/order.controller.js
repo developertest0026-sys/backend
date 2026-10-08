@@ -3,6 +3,26 @@ import Product from "../models/Product.js";
 import { createCashfreeOrder, fetchCashfreeOrder, verifyCashfreeSignature } from "../utils/cashfree.util.js";
 import { sendOrderEmail } from "../services/email.service.js";
 
+const generateUniqueOrderId = async () => {
+  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let uniqueId = "";
+  let exists = true;
+  let attempts = 0;
+  while (exists && attempts < 10) {
+    attempts++;
+    let randomStr = "";
+    for (let i = 0; i < 8; i++) {
+      randomStr += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    uniqueId = `#ORD-${randomStr}`;
+    const found = await Order.exists({ orderNumber: uniqueId });
+    if (!found) {
+      exists = false;
+    }
+  }
+  return uniqueId;
+};
+
 /**
  * 🔒 Verify Cashfree Payment Status Server-Side (Server-to-Server)
  */
@@ -13,13 +33,24 @@ export const verifyCashfreePayment = async (req, res) => {
       return res.status(400).json({ success: false, message: "Order ID is required" });
     }
 
-    const order = dbOrderId ? await Order.findById(dbOrderId) : await Order.findOne({ orderNumber: orderId });
+    let order = null;
+    if (dbOrderId) {
+      order = await Order.findById(dbOrderId);
+    }
+    if (!order && orderId) {
+      const cleanOrderId = orderId.replace("#", "");
+      order = await Order.findOne({ $or: [{ cashfreeOrderId: cleanOrderId }, { orderNumber: orderId }, { orderNumber: `#${cleanOrderId}` }] });
+    }
+
     if (!order) {
       return res.status(404).json({ success: false, message: "Order record not found" });
     }
 
+    const targetCfOrderId = order.cashfreeOrderId || (order.orderNumber ? order.orderNumber.replace("#", "") : (orderId ? String(orderId).replace("#", "") : ""));
+    console.log(`[Cashfree Verification] Querying PG for Order ID: ${targetCfOrderId} (Mongo ID: ${order._id})`);
+
     // Verify with Cashfree PG Server directly
-    const cfDetails = await fetchCashfreeOrder(order.orderNumber || orderId || order._id.toString());
+    const cfDetails = await fetchCashfreeOrder(targetCfOrderId);
     const isPaid = cfDetails && (cfDetails.order_status === "PAID" || cfDetails.order_status === "SUCCESS");
 
     const isProduction = process.env.CASHFREE_ENV === "PRODUCTION" || process.env.NODE_ENV === "production";
@@ -75,7 +106,13 @@ export const handleCashfreeWebhook = async (req, res) => {
     const { data, event } = req.body;
     if (event === "PAYMENT_SUCCESS" || data?.order?.order_status === "PAID") {
       const orderId = data?.order?.order_id;
-      const order = await Order.findOne({ $or: [{ orderNumber: orderId }, { _id: orderId }] });
+      let order = null;
+      if (mongoose.Types.ObjectId.isValid(orderId)) {
+        order = await Order.findById(orderId);
+      }
+      if (!order && orderId) {
+        order = await Order.findOne({ $or: [{ orderNumber: orderId }, { cashfreeOrderId: orderId }] });
+      }
 
       if (order && order.paymentStatus !== "Paid") {
         order.paymentStatus = "Paid";
@@ -167,13 +204,14 @@ export const checkoutOrder = async (req, res) => {
       finalPayable = totalAmount + totalShippingCharge;
     }
 
-    const orderIdNumber = `SW-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const orderIdNumber = await generateUniqueOrderId();
+    const pgOrderId = orderIdNumber.replace("#", "");
 
     let cashfreeData = null;
 
     if (!isCOD) {
       const cashfreeOrder = await createCashfreeOrder({
-        orderId: orderIdNumber,
+        orderId: pgOrderId,
         orderAmount: finalPayable,
         customerEmail: normalizedGuestDetails.email,
         customerPhone: normalizedGuestDetails.phone,
@@ -187,6 +225,8 @@ export const checkoutOrder = async (req, res) => {
     }
 
     const newOrder = await Order.create({
+      orderNumber: orderIdNumber,
+      cashfreeOrderId: isCOD ? undefined : pgOrderId,
       user: user || (req.user ? req.user._id : null),
       guestDetails: normalizedGuestDetails,
       products: processedProducts,
@@ -240,7 +280,7 @@ export const getOrders = async (req, res) => {
 
     const formattedOrders = orders.map(ord => ({
       ...ord,
-      orderNumber: ord.orderNumber || `SW-${new Date(ord.createdAt || Date.now()).toISOString().slice(0, 10).replace(/-/g, "")}-${ord._id.toString().slice(-4)}`,
+      orderNumber: ord.orderNumber || `#ORD-${ord._id.toString().slice(-8).toUpperCase()}`,
       customerName: ord.shippingAddress?.fullName || ord.guestDetails?.name || ord.user?.name || "Swariya Customer",
       customerEmail: ord.customerEmail || ord.guestDetails?.email || ord.user?.email || "customer@swariya.com",
       customerPhone: ord.customerPhone || ord.guestDetails?.phone || ord.user?.phone || "+919876543210",
@@ -278,15 +318,27 @@ export const getOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findById(id).populate("products.product").lean();
+    let order = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      order = await Order.findById(id).populate("products.product").lean();
+    }
+    if (!order) {
+      order = await Order.findOne({ $or: [{ orderNumber: id }, { cashfreeOrderId: id }] }).populate("products.product").lean();
+    }
 
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
+    const formattedOrder = {
+      ...order,
+      orderNumber: order.orderNumber || `#ORD-${order._id.toString().slice(-8).toUpperCase()}`
+    };
+
     return res.status(200).json({
       success: true,
-      data: order
+      data: formattedOrder
     });
   } catch (error) {
     console.error("Get Order Error:", error);

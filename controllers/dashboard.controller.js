@@ -28,7 +28,7 @@ export const getDashboardStats = async (_req, res) => {
 
     const formattedRecentOrders = recentOrders.map(ord => ({
       ...ord,
-      orderNumber: ord.orderNumber || `SW-${new Date(ord.createdAt).toISOString().slice(0, 10).replace(/-/g, "")}-${ord._id.toString().slice(-4)}`,
+      orderNumber: ord.orderNumber || `#ORD-${ord._id.toString().slice(-8).toUpperCase()}`,
       customerEmail: ord.customerEmail || ord.guestDetails?.email || ord.user?.email || "customer@swariya.com"
     }));
 

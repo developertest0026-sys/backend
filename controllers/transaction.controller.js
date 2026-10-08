@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Payment from "../models/Payment.js";
 import Order from "../models/Order.js";
 import { verifyCashfreeSignature } from "../utils/cashfree.util.js";
@@ -22,7 +23,14 @@ export const handleCashfreeWebhook = async (req, res) => {
       const { order_id, order_amount } = data.order;
       const payment = data.payment;
 
-      const orderRecord = await Order.findById(order_id);
+      let orderRecord = null;
+      if (mongoose.Types.ObjectId.isValid(order_id)) {
+        orderRecord = await Order.findById(order_id);
+      }
+      if (!orderRecord && order_id) {
+        const cleanOrderId = String(order_id).replace("#", "");
+        orderRecord = await Order.findOne({ $or: [{ cashfreeOrderId: cleanOrderId }, { orderNumber: order_id }, { orderNumber: `#${cleanOrderId}` }] });
+      }
 
       if (orderRecord) {
         orderRecord.orderStatus = "Confirmed";

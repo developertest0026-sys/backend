@@ -8,13 +8,13 @@
  */
 
 export const generateOrderEmailHTML = (order, statusType = 'CONFIRMED') => {
-  const orderNumber = order.orderNumber || order._id || 'SW-ORD';
+  const orderNumber = order.orderNumber || (order._id ? `#ORD-${order._id.toString().slice(-8).toUpperCase()}` : '#ORD-7F92KLM4');
   const customerName = order.guestDetails?.name || order.shippingAddress?.name || 'Valued Patron';
   const customerPhone = order.guestDetails?.phone || order.shippingAddress?.phone || '';
   const paymentMethod = order.paymentMethod === 'Online' ? 'Prepaid Online' : 'Cash On Delivery (COD)';
   const totalAmount = (order.totalAmount || 0).toLocaleString('en-IN');
   const shippingCharge = order.shippingCharge || 0;
-  
+
   const address = order.shippingAddress || {};
   const fullAddress = `${address.street || ''}, ${address.city || ''}, ${address.state || ''} - ${address.pincode || ''}`;
 
