@@ -1,5 +1,15 @@
 import nodemailer from 'nodemailer';
+import dns from 'dns';
 import { generateOrderEmailHTML } from '../templates/emailTemplates.js';
+
+// Force IPv4 DNS resolution for Node.js on Cloud platforms like Render (fixes ENETUNREACH IPv6 error)
+try {
+  if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+} catch (_e) {
+  // fallback if node version doesn't support
+}
 
 // Create SMTP transporter using environment configuration
 const createTransporter = () => {
@@ -20,9 +30,10 @@ const createTransporter = () => {
     tls: {
       rejectUnauthorized: false
     },
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 15000
+    family: 4, // 🔒 Force IPv4 connection to prevent ENETUNREACH IPv6 errors on Render
+    connectionTimeout: 20000,
+    greetingTimeout: 20000,
+    socketTimeout: 20000
   });
 };
 
