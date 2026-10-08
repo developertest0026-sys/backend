@@ -28,9 +28,20 @@ const createTransporter = () => {
     secure: port === 465,
     auth: { user, pass },
     tls: {
-      rejectUnauthorized: false
+      rejectUnauthorized: false,
+      servername: host
     },
-    family: 4, // 🔒 Force IPv4 connection to prevent ENETUNREACH IPv6 errors on Render
+    family: 4, // Force IPv4 socket
+    lookup: (hostname, _options, callback) => {
+      // Explicitly force IPv4 lookup to bypass IPv6 ENETUNREACH on Render cloud
+      dns.lookup(hostname, { family: 4 }, (err, address, family) => {
+        if (err) {
+          // Fallback to direct Hostinger IPv4 if DNS fails
+          return callback(null, '172.65.255.143', 4);
+        }
+        callback(null, address, family || 4);
+      });
+    },
     connectionTimeout: 20000,
     greetingTimeout: 20000,
     socketTimeout: 20000
