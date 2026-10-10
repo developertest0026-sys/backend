@@ -38,6 +38,7 @@ app.use(async (req, res, next) => {
 const allowedOrigins = [
   "https://sawyria.com",
   "https://www.sawyria.com",
+  "https://sawyriaadmin.netlify.app",
   "http://localhost:4200", // Angular Dev
   "http://localhost:3000", // React Dev
   "http://localhost:5173"  // Vite Dev
