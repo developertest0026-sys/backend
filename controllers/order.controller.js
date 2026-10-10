@@ -157,11 +157,19 @@ export const checkoutOrder = async (req, res) => {
         return res.status(404).json({ success: false, message: `Product ${item.product} not found` });
       }
 
+      const isPrepaidOrder = paymentMethod !== "COD" && paymentMethod !== "Cash on Delivery";
       // 🔒 Security: Always calculate price strictly from server database Product document to prevent client-side price tampering
-      const price = (prod.discountPrice && Number(prod.discountPrice) > 0) ? Number(prod.discountPrice) : Number(prod.price || 0);
-      const itemShippingCharge = Number(prod.shippingCharge || 0);
+      let price = (prod.discountPrice && Number(prod.discountPrice) > 0) ? Number(prod.discountPrice) : Number(prod.price || 0);
+      if (isPrepaidOrder && prod.prepaidPrice && Number(prod.prepaidPrice) > 0) {
+        price = Number(prod.prepaidPrice);
+      }
       const quantity = Math.max(1, Number(item.quantity || 1));
       totalAmount += price * quantity;
+
+      let itemShippingCharge = Number(prod.shippingCharge || 0);
+      if (isPrepaidOrder && prod.hasFreeShippingPrepaid !== false) {
+        itemShippingCharge = 0;
+      }
       totalShippingCharge += itemShippingCharge * quantity;
 
       const chosenColor = item.selectedColor || item.color || "";
@@ -194,15 +202,8 @@ export const checkoutOrder = async (req, res) => {
     };
 
     const isCOD = paymentMethod === "COD" || paymentMethod === "Cash on Delivery";
-    let finalPayable = totalAmount;
-    let prepaidDiscountAmount = 0;
-
-    if (!isCOD) {
-      prepaidDiscountAmount = Math.round(totalAmount * 0.10);
-      finalPayable = totalAmount - prepaidDiscountAmount + totalShippingCharge;
-    } else {
-      finalPayable = totalAmount + totalShippingCharge;
-    }
+    let finalPayable = totalAmount + totalShippingCharge;
+    let prepaidDiscountAmount = 0; // The discount is already reflected in discountPrice/prepaidPrice
 
     const orderIdNumber = await generateUniqueOrderId();
     const pgOrderId = orderIdNumber.replace("#", "");

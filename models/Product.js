@@ -28,6 +28,7 @@ const productSchema = new mongoose.Schema(
     size: { type: mongoose.Schema.Types.Mixed }, // String or Number
     price: { type: Number, required: true },
     discountPrice: { type: Number },
+    prepaidPrice: { type: Number },
     stock: { type: Number, required: true, default: 0 },
     images: [{ type: String }],
     variants: [
@@ -41,6 +42,7 @@ const productSchema = new mongoose.Schema(
     isNewArrival: { type: Boolean, default: false },
     isBestseller: { type: Boolean, default: false },
     hasCashOnDelivery: { type: Boolean, default: true },
+    hasFreeShippingPrepaid: { type: Boolean, default: true },
     hasVerifiedQuality: { type: Boolean, default: true },
     has247Support: { type: Boolean, default: true },
     has1YearWarranty: { type: Boolean, default: true }

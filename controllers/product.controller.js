@@ -286,3 +286,66 @@ export const checkProductSku = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message || "Internal Server Error" });
   }
 };
+
+export const generateSharePreview = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    let query = {};
+    if (isValidObjectId(slug)) {
+      query._id = slug;
+    } else {
+      query.$or = [{ slug: slug }, { sku: { $regex: new RegExp(`^${slug}$`, 'i') } }];
+    }
+
+    const product = await Product.findOne(query).lean();
+
+    if (!product) {
+      return res.status(404).send('Product not found');
+    }
+
+    const title = `${product.name} — Sawyria`;
+    const description = product.description ? product.description.substring(0, 150) + '...' : `Buy ${product.name} online at Sawyria.`;
+    const imageUrl = product.images && product.images.length > 0 ? product.images[0] : 'https://sawyria.com/logo.png';
+    const redirectUrl = `https://sawyria.com/product/${slug}`;
+
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <meta name="description" content="${description}">
+    <meta property="og:type" content="product">
+    <meta property="og:url" content="${redirectUrl}">
+    <meta property="og:title" content="${title}">
+    <meta property="og:description" content="${description}">
+    <meta property="og:image" content="${imageUrl}">
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="${redirectUrl}">
+    <meta property="twitter:title" content="${title}">
+    <meta property="twitter:description" content="${description}">
+    <meta property="twitter:image" content="${imageUrl}">
+    <script>
+        window.location.href = "${redirectUrl}";
+    </script>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #FAF8F5; }
+        .message { text-align: center; color: #59534C; }
+    </style>
+</head>
+<body>
+    <div class="message">
+        <p>Redirecting to Swariya Jewellers...</p>
+        <p>If you are not redirected, <a href="${redirectUrl}">click here</a>.</p>
+    </div>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    return res.send(html);
+  } catch (error) {
+    console.error("Error generating share preview:", error);
+    return res.status(500).send('Internal Server Error');
+  }
+};

@@ -35,8 +35,23 @@ app.use(async (req, res, next) => {
 });
 
 // Global Cors & Body Parsers
+const allowedOrigins = [
+  "https://sawyria.com",
+  "https://www.sawyria.com",
+  "http://localhost:4200", // Angular Dev
+  "http://localhost:3000", // React Dev
+  "http://localhost:5173"  // Vite Dev
+];
+
 app.use(cors({ 
-  origin: (origin, callback) => callback(null, true), // Dynamic origin echo for localhost:5173 & localhost:3000
+  origin: (origin, callback) => {
+    // allow requests with no origin (like mobile apps or curl requests) only if they pass Auth, but limit browser origins
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Strict CORS Policy: This origin is not allowed to access the API.'));
+    }
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]

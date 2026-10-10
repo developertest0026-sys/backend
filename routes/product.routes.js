@@ -5,13 +5,15 @@ import {
   checkProductSku,
   createProduct, 
   updateProduct, 
-  deleteProduct 
+  deleteProduct,
+  generateSharePreview
 } from "../controllers/product.controller.js";
 import { verifyToken, checkRole } from "../middlewares/authJwt.js";
 
 const router = Router();
 
 router.get("/products", getProducts);
+router.get("/share/product/:slug", generateSharePreview);
 router.get("/products/check-sku/:sku", checkProductSku);
 router.get("/products/:id", getProductById);
 router.post("/products", verifyToken, checkRole(["SUPER_ADMIN", "INVENTORY_MANAGER", "admin"]), createProduct);
